@@ -58,6 +58,10 @@ public class ChatSupportController {
     public ResponseEntity<List<ChatMessageDTO>> getChatMessages(@PathVariable String sessionId) {
         try {
             List<ChatMessageDTO> messages = chatSupportService.getChatMessages(sessionId);
+
+            for(ChatMessageDTO dto: messages) {
+                System.out.println("MESSAGE RESPONSE: " + dto.toString());
+            }
             return ResponseEntity.ok(messages);
         } catch (Exception e) {
             log.error("Error getting chat messages: {}", e.getMessage(), e);
