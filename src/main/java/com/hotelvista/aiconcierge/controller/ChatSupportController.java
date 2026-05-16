@@ -91,7 +91,7 @@ public class ChatSupportController {
     }
 
     /**
-     * Giao phiên chat cho một staff cụ thể
+     * Giao phiên chat staff
      * POST /api/chat-support/chats/{sessionId}/assign
      */
     @PostMapping("/chats/{sessionId}/assign")
@@ -110,7 +110,7 @@ public class ChatSupportController {
     }
 
     /**
-     * Đánh dấu phiên chat là đã giải quyết
+     * Đánh dấu phiên chat đã giải quyết
      * PATCH /api/chat-support/chats/{sessionId}/resolve
      */
     @PatchMapping("/chats/{sessionId}/resolve")
@@ -125,7 +125,7 @@ public class ChatSupportController {
     }
 
     /**
-     * Lấy toàn bộ lịch sử chat của một khách hàng
+     * Lấy toàn bộ lịch sử chat
      * GET /api/chat-support/customers/{customerId}/history
      */
     @GetMapping("/customers/{customerId}/history")

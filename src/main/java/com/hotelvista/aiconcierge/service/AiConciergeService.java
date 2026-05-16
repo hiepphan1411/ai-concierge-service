@@ -1,5 +1,6 @@
 package com.hotelvista.aiconcierge.service;
 
+import com.hotelvista.aiconcierge.dto.aichat.AiChatResponse;
 import com.hotelvista.aiconcierge.dto.aichat.ChatHistoryDTO;
 import com.hotelvista.aiconcierge.dto.aichat.MessageDTO;
 import com.hotelvista.aiconcierge.model.AiConversationHistory;
@@ -22,12 +23,12 @@ import java.util.stream.Collectors;
 @Service
 public class AiConciergeService {
 
-    private final GeminiService geminiService;
+    private final OllamaService ollamaService;
     private final ConversationMemory conversationMemory;
     private final HotelIntentOrchestrator hotelIntentOrchestrator;
 
-    @Value("${backend.service.url:http://localhost:8080}")
-    private String backendServiceUrl;
+    @Value("${gateway.service.url:http://localhost:8080}")
+    private String gatewayServiceUrl;
 
     @Autowired
     private ChatSessionRepository chatSessionRepository;
@@ -39,38 +40,32 @@ public class AiConciergeService {
     private AiConversationHistoryRepository conversationHistoryRepository;
 
     @Autowired
-    public AiConciergeService(GeminiService geminiService,
+    public AiConciergeService(OllamaService ollamaService,
                               ConversationMemory conversationMemory,
                               HotelIntentOrchestrator hotelIntentOrchestrator) {
-        this.geminiService = geminiService;
+        this.ollamaService = ollamaService;
         this.conversationMemory = conversationMemory;
         this.hotelIntentOrchestrator = hotelIntentOrchestrator;
     }
 
     /**
-     * Xử lý câu hỏi của user qua Intent Orchestrator và trả về phản hồi AI
-     *
-     * @return Mảng [detectedIntent, aiResponse] để controller có thể log intent
+     * Xử lý câu hỏi của user qua Intent Orchestrator
      */
     public String[] getChatResponseWithIntent(String userId, String message) {
         try {
             AiConversationHistory history = getOrCreateConversationHistory(userId);
             List<String> historyMessages = conversationMemory.get(userId);
 
-            // Gọi orchestrator: Intent → Tool → Response
             String[] result = hotelIntentOrchestrator.processMessage(userId, message, historyMessages);
             String detectedIntent = result[0];
             String response = result[1];
 
-            // Cập nhật memory
             conversationMemory.add(userId, "User: " + message);
             conversationMemory.add(userId, "Assistant: " + response);
 
-            // Persist MongoDB
             saveConversationToMongoDB(userId, history, message, response);
             saveToChatSession(userId, message, response);
 
-            // Handoff sang staff nếu cần
             if (shouldHandoffToStaff(message, response)) {
                 createStaffHandoffSession(userId, message, response);
             }
@@ -81,20 +76,52 @@ public class AiConciergeService {
             log.error("Error processing chat for user {}: {}", userId, e.getMessage(), e);
             return new String[]{
                 "error",
-                "Sorry, I'm having trouble processing your request. Please try again."
+                "Xin lỗi! Đã xảy ra sự cố, Vui lòng kiểm tra lại"
             };
         }
     }
 
     /**
-     * Backward-compatible wrapper - trả về chỉ response string.
+     * Backward-compatible wrapper
      */
     public String getChatResponse(String userId, String message) {
         return getChatResponseWithIntent(userId, message)[1];
     }
 
     /**
-     * Bắt đầu một phiên chat AI mới cho user (xoá memory cũ).
+     * Phiên bản đầy đủ
+     */
+    public AiChatResponse getChatResponseFull(String userId, String message) {
+        try {
+            AiConversationHistory history = getOrCreateConversationHistory(userId);
+            List<String> historyMessages = conversationMemory.get(userId);
+
+            AiChatResponse richResponse = hotelIntentOrchestrator.processMessageFull(userId, message, historyMessages);
+            String detectedIntent = richResponse.getIntent() != null ? richResponse.getIntent() : "general";
+            String response = richResponse.getContent();
+
+            conversationMemory.add(userId, "User: " + message);
+            conversationMemory.add(userId, "Assistant: " + response);
+
+            saveConversationToMongoDB(userId, history, message, response);
+            saveToChatSession(userId, message, response);
+
+            if (shouldHandoffToStaff(message, response)) {
+                createStaffHandoffSession(userId, message, response);
+            }
+
+            return richResponse;
+
+        } catch (Exception e) {
+            log.error("Error processing full chat for user {}: {}", userId, e.getMessage(), e);
+            return new AiChatResponse(
+                "Xin lỗi! Đã xảy ra sự cố, Vui lòng kiểm tra lại", false
+            );
+        }
+    }
+
+    /**
+     * Bắt đầu một phiên chat AI
      */
     public String startNewChatSession(String userId) {
         try {
@@ -108,7 +135,7 @@ public class AiConciergeService {
             newHistory.setLastUpdated(LocalDateTime.now());
             newHistory.addEntry("assistant",
                     "Hello! I'm Vista's AI Concierge. I can help you with room information, " +
-                    "availability, hotel amenities, services, and more. How may I assist you today?");
+                    "availability, hotel amenities, services, and more. How may I assist you today? ");
 
             conversationHistoryRepository.save(newHistory);
             conversationMemory.clear(userId);
@@ -123,7 +150,7 @@ public class AiConciergeService {
     }
 
     /**
-     * Lấy danh sách tất cả các phiên chat AI của user (sắp xếp mới nhất trước).
+     * Lấy danh sách tất cả các phiên chat AI của user
      */
     public List<ChatHistoryDTO> getUserChatHistory(String userId) {
         try {
@@ -151,7 +178,7 @@ public class AiConciergeService {
     }
 
     /**
-     * Lấy tất cả tin nhắn trong một phiên chat AI cụ thể.
+     * Lấy tất cả tin nhắn trong một phiên chat AI
      */
     public List<MessageDTO> getSessionMessages(String userId, String sessionId) {
         try {
@@ -182,7 +209,7 @@ public class AiConciergeService {
     }
 
     /**
-     * Xoá một phiên chat AI.
+     * Xoá một phiên chat AI
      */
     public void deleteChatSession(String userId, String sessionId) {
         try {
@@ -195,7 +222,7 @@ public class AiConciergeService {
     }
 
     /**
-     * Kiểm tra xem message có liên quan đến phòng để hiển thị room card không.
+     * Kiểm tra xem message có liên quan đến phòng để hiển thị room card không
      */
     public boolean shouldShowRoomCards(String message) {
         if (message == null) return false;
@@ -210,7 +237,7 @@ public class AiConciergeService {
     }
 
     /**
-     * Xoá toàn bộ lịch sử chat AI của một user.
+     * Xoá toàn bộ lịch sử chat AI của một user
      */
     public void clearConversationHistory(String userId) {
         try {

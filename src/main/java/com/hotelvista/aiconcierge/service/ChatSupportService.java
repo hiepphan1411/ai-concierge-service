@@ -26,7 +26,7 @@ public class ChatSupportService {
     private ChatMessageRepository chatMessageRepository;
 
     /**
-     * Lấy danh sách chat đang được giao cho một staff cụ thể (trạng thái ACTIVE)
+     * Lấy danh sách chat đang được giao cho một staff cụ thể ACTIVE
      */
     public List<ChatSessionDTO> getStaffChats(String staffId) {
         List<ChatSession> sessions = chatSessionRepository
@@ -38,7 +38,7 @@ public class ChatSupportService {
     }
 
     /**
-     * Lấy tất cả chat đang chờ được staff tiếp nhận (trạng thái WAITING)
+     * Lấy tất cả chat đang chờ được staff tiếp nhận WAITING
      */
     public List<ChatSessionDTO> getAllPendingChats() {
         List<ChatSession> sessions = chatSessionRepository
@@ -75,7 +75,6 @@ public class ChatSupportService {
 
         ChatMessage saved = chatMessageRepository.save(message);
 
-        // Cập nhật lastMessage trong session
         ChatSession session = chatSessionRepository.findBySessionId(sessionId)
                 .orElseThrow(() -> new RuntimeException("Session not found: " + sessionId));
         session.setLastMessage(content);
@@ -87,7 +86,7 @@ public class ChatSupportService {
     }
 
     /**
-     * Giao phiên chat cho một staff cụ thể (chuyển trạng thái sang ACTIVE)
+     * Giao phiên chat cho một staff
      */
     public void assignChatToStaff(String sessionId, String staffId, String staffName) {
         ChatSession session = chatSessionRepository.findBySessionId(sessionId)

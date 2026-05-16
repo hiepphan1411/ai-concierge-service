@@ -13,7 +13,7 @@ public class MongoConfig {
 
     @Bean
     public AuditorAware<String> auditorProvider() {
-        // TODO: Có thể parse token request header ở đây
+        // TODO: Token parse
         return () -> Optional.of("ai-service");
     }
 }

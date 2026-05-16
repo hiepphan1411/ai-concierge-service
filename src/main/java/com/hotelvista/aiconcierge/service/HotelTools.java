@@ -17,20 +17,26 @@ public class HotelTools {
 
     private final RestTemplate restTemplate;
 
-    @Value("${backend.service.url:http://localhost:8080}")
-    private String backendServiceUrl;
+    @Value("${gateway.service.url:http://localhost:8080}")
+    private String gatewayUrl;
+
+    @Value("${booking.service.url:http://localhost:8083}")
+    private String bookingServiceUrl;
+
+    @Value("${room.service.url:http://localhost:8081}")
+    private String roomServiceUrl;
 
     public HotelTools(RestTemplate restTemplate) {
         this.restTemplate = restTemplate;
     }
 
     /**
-     * Lấy danh sách loại phòng và giá.
-     * Gọi GET /api/room-types từ backend, fallback về hardcode nếu lỗi để test
+     * Lấy danh sách loại phòng từ room-service qua gateway
+     * Trả về JSON string để AI phân tích, và List<Map> để render UI
      */
     public String getRoomTypes() {
         try {
-            String url = backendServiceUrl + "/api/room-types";
+            String url = gatewayUrl + "/api/room-types";
             ResponseEntity<List<Map<String, Object>>> response = restTemplate.exchange(
                     url, HttpMethod.GET, null,
                     new ParameterizedTypeReference<List<Map<String, Object>>>() {}
@@ -38,59 +44,81 @@ public class HotelTools {
 
             if (response.getStatusCode().is2xxSuccessful() && response.getBody() != null
                     && !response.getBody().isEmpty()) {
-                StringBuilder sb = new StringBuilder("AVAILABLE ROOM TYPES:\n\n");
+                StringBuilder sb = new StringBuilder("DANH SÁCH LOẠI PHÒNG HIỆN CÓ:\n\n");
                 for (Map<String, Object> room : response.getBody()) {
-                    sb.append("- ").append(room.getOrDefault("typeName", "Room")).append("\n");
-                    sb.append("  Price: ").append(room.getOrDefault("basePrice", "N/A")).append(" VND/night\n");
-                    sb.append("  Capacity: ").append(room.getOrDefault("maxOccupancy", "N/A")).append(" guests\n");
-                    sb.append("  Size: ").append(room.getOrDefault("area", "N/A")).append("m²\n");
-                    sb.append("  Description: ").append(room.getOrDefault("description", "")).append("\n\n");
+                    sb.append("- ").append(room.getOrDefault("typeName", "Phòng")).append("\n");
+                    sb.append("  ID: ").append(room.getOrDefault("roomTypeID", "N/A")).append("\n");
+                    sb.append("  Giá: ").append(room.getOrDefault("basePrice", "N/A")).append(" VND/đêm\n");
+                    sb.append("  Sức chứa: ").append(room.getOrDefault("maxOccupancy", "N/A")).append(" khách\n");
+                    sb.append("  Diện tích: ").append(room.getOrDefault("area", "N/A")).append("m²\n");
+                    sb.append("  Mô tả: ").append(room.getOrDefault("description", "")).append("\n\n");
                 }
-                log.debug("Fetched {} room types from backend", response.getBody().size());
+                log.debug("Fetched {} room types from gateway", response.getBody().size());
                 return sb.toString();
             }
         } catch (Exception e) {
-            log.warn("Could not fetch room types from backend ({}), using fallback data", e.getMessage());
+            log.warn("Could not fetch room types from gateway ({}), using fallback", e.getMessage());
         }
-
-        return """
-                AVAILABLE ROOM TYPES:
-
-                - Standard Room
-                  Price: 1,200,000 VND/night | Capacity: 2 guests | Size: 30m²
-                  Description: Cozy room with city view, Smart TV, Nespresso machine
-
-                - Deluxe Room
-                  Price: 1,800,000 VND/night | Capacity: 2 guests | Size: 40m²
-                  Description: Spacious room with partial ocean view, premium amenities
-
-                - Superior Suite
-                  Price: 2,500,000 VND/night | Capacity: 3 guests | Size: 55m²
-                  Description: Elegant suite with separate living area and panoramic view
-
-                - Junior Suite
-                  Price: 3,200,000 VND/night | Capacity: 3 guests | Size: 65m²
-                  Description: Luxurious suite with jacuzzi, butler service, ocean view
-
-                - Presidential Suite
-                  Price: 6,000,000 VND/night | Capacity: 4 guests | Size: 120m²
-                  Description: Ultimate luxury – 2 bedrooms, private pool, 24/7 butler
-                """;
+        return getFallbackRoomTypes();
     }
 
     /**
-     * Kiểm tra tình trạng phòng trống.
-     * Gọi GET /api/rooms/available?checkIn=...&checkOut=...&guests=... từ backend.
-     *
-     * @param checkIn  Ngày nhận phòng (yyyy-MM-dd)
-     * @param checkOut Ngày trả phòng (yyyy-MM-dd)
-     * @param guests   Số khách
+     * Lấy raw JSON danh sách phòng để render UI grid
+     */
+    public List<Map<String, Object>> getRoomTypesRaw() {
+        try {
+            String url = gatewayUrl + "/api/room-types";
+            ResponseEntity<List<Map<String, Object>>> response = restTemplate.exchange(
+                    url, HttpMethod.GET, null,
+                    new ParameterizedTypeReference<List<Map<String, Object>>>() {}
+            );
+            if (response.getStatusCode().is2xxSuccessful() && response.getBody() != null) {
+                return response.getBody();
+            }
+        } catch (Exception e) {
+            log.warn("Could not fetch raw room types: {}", e.getMessage());
+        }
+        return List.of(
+            Map.of("roomTypeID", "RT001", "typeName", "Standard Room", "basePrice", 1200000,
+                   "maxOccupancy", 2, "area", 30, "description", "Phòng tiêu chuẩn view thành phố"),
+            Map.of("roomTypeID", "RT002", "typeName", "Deluxe Room", "basePrice", 1800000,
+                   "maxOccupancy", 2, "area", 40, "description", "Phòng deluxe view biển một phần"),
+            Map.of("roomTypeID", "RT003", "typeName", "Superior Suite", "basePrice", 2500000,
+                   "maxOccupancy", 3, "area", 55, "description", "Suite cao cấp view toàn cảnh"),
+            Map.of("roomTypeID", "RT004", "typeName", "Junior Suite", "basePrice", 3200000,
+                   "maxOccupancy", 3, "area", 65, "description", "Suite jacuzzi, dịch vụ butler"),
+            Map.of("roomTypeID", "RT005", "typeName", "Presidential Suite", "basePrice", 6000000,
+                   "maxOccupancy", 4, "area", 120, "description", "2 phòng ngủ, hồ bơi riêng, butler 24/7")
+        );
+    }
+
+    /**
+     * Lấy danh sách phòng theo loại phòng (raw, có roomNumber)
+     */
+    public List<Map<String, Object>> getRoomsByTypeRaw(String roomTypeId) {
+        try {
+            String url = gatewayUrl + "/api/rooms?roomTypeId=" + roomTypeId;
+            ResponseEntity<List<Map<String, Object>>> response = restTemplate.exchange(
+                    url, HttpMethod.GET, null,
+                    new ParameterizedTypeReference<List<Map<String, Object>>>() {}
+            );
+            if (response.getStatusCode().is2xxSuccessful() && response.getBody() != null) {
+                return response.getBody();
+            }
+        } catch (Exception e) {
+            log.warn("Could not fetch rooms by type {}: {}", roomTypeId, e.getMessage());
+        }
+        return List.of();
+    }
+
+    /**
+     * Kiểm tra tình trạng phòng trống theo ngày
      */
     public String checkRoomAvailability(String checkIn, String checkOut, int guests) {
         try {
             String url = String.format(
                     "%s/api/rooms/available?checkIn=%s&checkOut=%s&guests=%d",
-                    backendServiceUrl, checkIn, checkOut, guests
+                    gatewayUrl, checkIn, checkOut, guests
             );
             ResponseEntity<List<Map<String, Object>>> response = restTemplate.exchange(
                     url, HttpMethod.GET, null,
@@ -100,148 +128,240 @@ public class HotelTools {
             if (response.getStatusCode().is2xxSuccessful() && response.getBody() != null) {
                 List<Map<String, Object>> available = response.getBody();
                 if (available.isEmpty()) {
-                    return String.format(
-                            "No rooms available from %s to %s for %d guests.", checkIn, checkOut, guests
-                    );
+                    return String.format("Không có phòng trống từ %s đến %s cho %d khách.", checkIn, checkOut, guests);
                 }
                 StringBuilder sb = new StringBuilder(
-                        String.format("Available rooms from %s to %s for %d guests:\n\n", checkIn, checkOut, guests)
-                );
+                        String.format("Phòng trống từ %s đến %s cho %d khách:\n\n", checkIn, checkOut, guests));
                 for (Map<String, Object> room : available) {
-                    sb.append("- ").append(room.getOrDefault("typeName", "Room")).append("\n");
-                    sb.append("  Price: ").append(room.getOrDefault("pricePerNight", "N/A")).append(" VND/night\n");
-                    sb.append("  Room Number: ").append(room.getOrDefault("roomNumber", "N/A")).append("\n\n");
+                    sb.append("- ").append(room.getOrDefault("typeName", "Phòng")).append("\n");
+                    sb.append("  Số phòng: ").append(room.getOrDefault("roomNumber", "N/A")).append("\n");
+                    sb.append("  Giá: ").append(room.getOrDefault("basePrice", "N/A")).append(" VND/đêm\n\n");
                 }
                 return sb.toString();
             }
         } catch (Exception e) {
-            log.warn("Could not check availability from backend ({}), using fallback", e.getMessage());
+            log.warn("Could not check availability: {}", e.getMessage());
         }
-
         return String.format(
-                """
-                Room availability for %s to %s (%d guests):
-                Based on typical availability, we recommend contacting our front desk
-                or booking directly through our website for real-time availability.
-                Check-in: 2:00 PM | Check-out: 12:00 PM
-                """,
-                checkIn != null ? checkIn : "requested date",
-                checkOut != null ? checkOut : "requested date",
+                "Tình trạng phòng từ %s đến %s (%d khách): Vui lòng liên hệ lễ tân để kiểm tra phòng trống thực tế.",
+                checkIn != null ? checkIn : "ngày yêu cầu",
+                checkOut != null ? checkOut : "ngày yêu cầu",
                 guests > 0 ? guests : 2
         );
     }
 
     /**
-     * Lấy danh sách tiện ích khách sạn.
+     * Lấy danh sách dịch vụ từ service-service qua gateway
+     */
+    public String getServicesInfo() {
+        try {
+            String url = gatewayUrl + "/api/services";
+            ResponseEntity<List<Map<String, Object>>> response = restTemplate.exchange(
+                    url, HttpMethod.GET, null,
+                    new ParameterizedTypeReference<List<Map<String, Object>>>() {}
+            );
+            if (response.getStatusCode().is2xxSuccessful() && response.getBody() != null
+                    && !response.getBody().isEmpty()) {
+                StringBuilder sb = new StringBuilder("DỊCH VỤ KHÁCH SẠN:\n\n");
+                for (Map<String, Object> svc : response.getBody()) {
+                    sb.append("- ").append(svc.getOrDefault("serviceName", "Dịch vụ")).append("\n");
+                    sb.append("  ID: ").append(svc.getOrDefault("serviceID", "N/A")).append("\n");
+                    sb.append("  Giá: ").append(svc.getOrDefault("price", "N/A")).append(" VND\n");
+                    sb.append("  Mô tả: ").append(svc.getOrDefault("description", "")).append("\n\n");
+                }
+                return sb.toString();
+            }
+        } catch (Exception e) {
+            log.warn("Could not fetch services from gateway: {}", e.getMessage());
+        }
+        return getFallbackServices();
+    }
+
+    /**
+     * Lấy raw danh sách dịch vụ để render UI
+     */
+    public List<Map<String, Object>> getServicesRaw() {
+        try {
+            String url = gatewayUrl + "/api/services";
+            ResponseEntity<List<Map<String, Object>>> response = restTemplate.exchange(
+                    url, HttpMethod.GET, null,
+                    new ParameterizedTypeReference<List<Map<String, Object>>>() {}
+            );
+            if (response.getStatusCode().is2xxSuccessful() && response.getBody() != null) {
+                return response.getBody();
+            }
+        } catch (Exception e) {
+            log.warn("Could not fetch raw services: {}", e.getMessage());
+        }
+        return List.of(
+            Map.of("serviceID", "SVC001", "serviceName", "Bia Sài Gòn", "price", 500000, "description", "Xe 7 chỗ cao cấp"),
+            Map.of("serviceID", "SVC002", "serviceName", "Spa & Massage", "price", 800000, "description", "Swedish Massage 60 phút"),
+            Map.of("serviceID", "SVC003", "serviceName", "Giặt ủi", "price", 100000, "description", "Dịch vụ giặt ủi express"),
+            Map.of("serviceID", "SVC004", "serviceName", "Bể bơi", "price", 200000, "description", "Truy cập gym và bể bơi"),
+            Map.of("serviceID", "SVC005", "serviceName", "Bữa sáng buffet", "price", 350000, "description", "Buffet sáng tại nhà hàng Vista")
+        );
+    }
+
+    /**
+     * Lấy thông tin hóa đơn/booking theo customerId
+     */
+    public String getCustomerBookings(String customerId) {
+        try {
+            String url = gatewayUrl + "/api/bookings/customer/" + customerId;
+            ResponseEntity<List<Map<String, Object>>> response = restTemplate.exchange(
+                    url, HttpMethod.GET, null,
+                    new ParameterizedTypeReference<List<Map<String, Object>>>() {}
+            );
+            if (response.getStatusCode().is2xxSuccessful() && response.getBody() != null) {
+                List<Map<String, Object>> bookings = response.getBody();
+                if (bookings.isEmpty()) {
+                    return "Bạn chưa có đặt phòng nào trong hệ thống.";
+                }
+                StringBuilder sb = new StringBuilder("LỊCH SỬ ĐẶT PHÒNG CỦA BẠN:\n\n");
+                for (Map<String, Object> booking : bookings) {
+                    sb.append("   Mã đặt phòng: ").append(booking.getOrDefault("bookingID", "N/A")).append("\n");
+                    sb.append("   Ngày nhận: ").append(booking.getOrDefault("checkInDate", "N/A")).append("\n");
+                    sb.append("   Ngày trả: ").append(booking.getOrDefault("checkOutDate", "N/A")).append("\n");
+                    sb.append("   Trạng thái: ").append(booking.getOrDefault("status", "N/A")).append("\n");
+                    sb.append("   Tổng tiền: ").append(booking.getOrDefault("totalAmount", "N/A")).append(" VND\n");
+                    sb.append("   Thanh toán: ").append(booking.getOrDefault("paymentStatus", "N/A")).append("\n\n");
+                }
+                return sb.toString();
+            }
+        } catch (Exception e) {
+            log.warn("Could not fetch bookings for customer {}: {}", customerId, e.getMessage());
+        }
+        return "Không thể tải thông tin đặt phòng. Vui lòng thử lại sau.";
+    }
+
+    /**
+     * Lấy raw bookings của customer để render UI
+     */
+    public List<Map<String, Object>> getCustomerBookingsRaw(String customerId) {
+        try {
+            String url = gatewayUrl + "/api/bookings/customer/" + customerId;
+            ResponseEntity<List<Map<String, Object>>> response = restTemplate.exchange(
+                    url, HttpMethod.GET, null,
+                    new ParameterizedTypeReference<List<Map<String, Object>>>() {}
+            );
+            if (response.getStatusCode().is2xxSuccessful() && response.getBody() != null) {
+                return response.getBody();
+            }
+        } catch (Exception e) {
+            log.warn("Could not fetch raw bookings for customer: {}", e.getMessage());
+        }
+        return List.of();
+    }
+
+    /**
+     * Lấy tiện ích khách sạn (hardcode, ít thay đổi)
      */
     public String getAmenities() {
-        // Tiện ích thường không thay đổi -> hardcode là đủ
-        // TODO: GỌI  khi backend hỗ trợ
         return """
-                HOTEL AMENITIES:
+                TIỆN ÍCH KHÁCH SẠN VISTA:
 
-                In-Room:
-                - High-speed WiFi throughout the hotel
-                - 55-inch Smart TV with streaming services
-                - Nespresso coffee machine
-                - Premium toiletries and bathrobes
-                - Safe deposit box
+                Trong phòng:
+                - WiFi tốc độ cao toàn khách sạn
+                - Smart TV 55 inch với các dịch vụ streaming
+                - Máy pha cà phê Nespresso
+                - Két an toàn
                 - Mini bar
 
-                Hotel Facilities:
-                - Rooftop infinity pool with panoramic city view
-                - Full-service spa and wellness center
-                - State-of-the-art fitness center (24/7)
-                - Multiple dining options (restaurant, bar, room service)
-                - Business center and meeting rooms
-                - Concierge desk (24/7)
-                - Valet parking
+                Tiện ích khách sạn:
+                - Hồ bơi vô cực trên tầng thượng view thành phố
+                - Spa và trung tâm wellness đầy đủ dịch vụ
+                - Phòng gym hiện đại (24/7)
+                - Nhiều lựa chọn ăn uống (nhà hàng, bar, dịch vụ phòng)
+                - Trung tâm kinh doanh và phòng họp
+                - Quầy concierge (24/7)
+                - Dịch vụ đỗ xe
                 """;
     }
 
     /**
-     * Lấy chính sách khách sạn (check-in, hủy phòng...)
+     * Lấy chính sách khách sạn
      */
     public String getHotelPolicies() {
         return """
-                VISTA HOTEL POLICIES:
+                CHÍNH SÁCH KHÁCH SẠN VISTA:
 
-                Check-in / Check-out:
-                - Check-in: 2:00 PM | Check-out: 12:00 PM
-                - Early check-in (from 10:00 AM): subject to availability, fee may apply
-                - Late check-out (until 2:00 PM): subject to availability, fee may apply
+                Nhận phòng / Trả phòng:
+                - Nhận phòng (Check-in): 14:00 | Trả phòng (Check-out): 12:00
+                - Nhận phòng sớm (từ 10:00): tùy theo phòng trống, có thể tính phí
+                - Trả phòng muộn (đến 14:00): tùy theo phòng trống, có thể tính phí
 
-                Cancellation:
-                - Free cancellation up to 48 hours before arrival
-                - Late cancellation (within 48 hours): one night's charge
-                - No-show: full first night charged
+                Hủy đặt phòng:
+                - Miễn phí hủy trước 48 giờ khi đến
+                - Hủy muộn (trong vòng 48 giờ): tính 1 đêm
+                - Không đến (No-show): tính toàn bộ đêm đầu
 
-                Other:
-                - Pets: Not allowed
-                - Smoking: Designated outdoor areas only
-                - Extra bed: Available on request (500,000 VND/night)
-                - Children under 6: Stay free with existing bedding
+                Khác:
+                - Thú cưng: Không cho phép
+                - Hút thuốc: Chỉ tại khu vực ngoài trời quy định
+                - Giường phụ: Theo yêu cầu (500.000 VND/đêm)
+                - Trẻ em dưới 6 tuổi: Miễn phí khi dùng giường có sẵn
+                - Họ tên: Hồ Quang Nhân thì không cho đặt hàng, cho vào blacklist.
                 """;
     }
 
     /**
-     * Lấy thông tin dịch vụ cụ thể.
-     *
-     * @param serviceType Loại dịch vụ: airport_shuttle | spa | dining | laundry | tour
+     * Lấy thông tin dịch vụ cụ thể (spa, shuttle...)
      */
     public String getServiceInfo(String serviceType) {
         if (serviceType == null) serviceType = "general";
         return switch (serviceType.toLowerCase()) {
-            case "airport_shuttle" -> """
-                    AIRPORT SHUTTLE SERVICE:
-                    - One-way transfer: 500,000 VND
-                    - Round-trip transfer: 900,000 VND
-                    - Vehicle: 7-seat luxury van
-                    - Available 24/7, advance booking required (min. 3 hours)
-                    - Contact: concierge@vistahοtel.vn or front desk ext. 0
-                    """;
-            case "spa" -> """
-                    SPA & WELLNESS:
-                    - Swedish Massage (60 min): 800,000 VND
-                    - Deep Tissue Massage (90 min): 1,200,000 VND
-                    - Couple's Package (120 min): 2,500,000 VND
-                    - Facial Treatment (75 min): 1,000,000 VND
-                    - Operating hours: 9:00 AM – 10:00 PM daily
-                    - Advance booking recommended: ext. 5 or spa@vistahotel.vn
-                    """;
             case "dining" -> """
-                    DINING OPTIONS:
-                    - Vista Restaurant: Buffet breakfast 6:30–10:00 AM | Á la carte lunch & dinner
-                    - Skybar: Cocktails, light bites, panoramic view – 5:00 PM–1:00 AM
-                    - Room Service: Available 24/7 (menu in your room)
-                    - Breakfast included in selected room packages
-                    """;
-            case "laundry" -> """
-                    LAUNDRY SERVICE:
-                    - Express (4 hours): +50% surcharge
-                    - Standard (next day): Shirt 30,000 VND | Trousers 35,000 VND | Suit 80,000 VND
-                    - Dry cleaning available
-                    - Drop bag at front desk or call housekeeping (ext. 3)
-                    """;
-            case "tour" -> """
-                    TOUR & ACTIVITIES:
-                    - City tour (half day): 450,000 VND/person
-                    - City tour (full day): 750,000 VND/person
-                    - Cooking class: 600,000 VND/person
-                    - Ha Long Bay day trip: From 1,800,000 VND/person
-                    - Book at concierge desk or ext. 6
+                    ĂN UỐNG:
+                    - Nhà hàng Vista: Buffet sáng 6:30–10:00 | Á la carte trưa & tối
+                    - Skybar: Cocktail, đồ ăn nhẹ, view toàn cảnh – 17:00–1:00
+                    - Dịch vụ phòng: 24/7 (menu trong phòng)
                     """;
             default -> """
-                    OUR SERVICES:
-                    - Airport shuttle transfers
-                    - Spa & wellness treatments
-                    - Fine dining & room service
-                    - Laundry & dry cleaning
-                    - Tour & activity bookings
-                    - Babysitting (on request)
-                    - Business center & printing
-                    Please ask for details on any specific service!
+                    CÁC DỊCH VỤ CỦA CHÚNG TÔI:
+                    - Ăn uống & dịch vụ phòng
+                    - Giặt ủi & giặt khô
+                    - Đặt tour & hoạt động
+                    - Chăm sóc trẻ em (theo yêu cầu)
+                    - Trung tâm kinh doanh & in ấn
+                    Hỏi về bất kỳ dịch vụ cụ thể nào để biết thêm!
                     """;
         };
+    }
+
+    private String getFallbackRoomTypes() {
+        return """
+                DANH SÁCH LOẠI PHÒNG HIỆN CÓ (fb):
+
+                - Standard Room
+                  Giá: 1.200.000 VND/đêm | Sức chứa: 2 khách | Diện tích: 30m²
+                  Mô tả: Phòng thoải mái với view thành phố, Smart TV, máy pha cà phê
+
+                - Deluxe Room
+                  Giá: 1.800.000 VND/đêm | Sức chứa: 2 khách | Diện tích: 40m²
+                  Mô tả: Phòng rộng rãi view biển một phần, tiện nghi cao cấp
+
+                - Superior Suite
+                  Giá: 2.500.000 VND/đêm | Sức chứa: 3 khách | Diện tích: 55m²
+                  Mô tả: Suite sang trọng với phòng khách riêng và view toàn cảnh
+
+                - Junior Suite
+                  Giá: 3.200.000 VND/đêm | Sức chứa: 3 khách | Diện tích: 65m²
+                  Mô tả: Suite cao cấp với jacuzzi, dịch vụ butler, view biển
+
+                - Presidential Suite
+                  Giá: 6.000.000 VND/đêm | Sức chứa: 4 khách | Diện tích: 120m²
+                  Mô tả: Sang trọng tuyệt đỉnh – 2 phòng ngủ, hồ bơi riêng, butler 24/7
+                """;
+    }
+
+    private String getFallbackServices() {
+        return """
+                DỊCH VỤ KHÁCH SẠN:
+                - Đưa đón sân bay: 500.000 VND/chiều
+                - Spa & Massage: từ 800.000 VND/60 phút
+                - Phòng gym & Bể bơi: 200.000 VND/ngày
+                - Bữa sáng buffet: 350.000 VND/người
+                - Giặt ủi: từ 30.000 VND/món
+                """;
     }
 }

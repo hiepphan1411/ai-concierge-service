@@ -66,25 +66,22 @@ public class AiController {
                     .body(new AiChatResponse(e.getMessage(), false));
         }
 
-        // Process Intent -> Tool -> Response
+        // Process Intent -> Tool -> Rich Response (uiType + uiData)
         try {
-            String[] result = aiConciergeService.getChatResponseWithIntent(userId, cleanMessage);
-            String detectedIntent = result[0];
-            String response = result[1];
-
-            boolean showCards = aiConciergeService.shouldShowRoomCards(cleanMessage);
+            AiChatResponse richResponse = aiConciergeService.getChatResponseFull(userId, cleanMessage);
+            String detectedIntent = richResponse.getIntent() != null ? richResponse.getIntent() : "general";
             long processingTime = System.currentTimeMillis() - startTime;
 
             // Audit log (async, không block response)
             auditService.logChatSuccess(
-                    userId, cleanMessage, response,
+                    userId, cleanMessage, richResponse.getContent(),
                     detectedIntent, processingTime, ipAddress
             );
 
-            log.info("Chat processed for userId={}, intent={}, time={}ms",
-                    userId, detectedIntent, processingTime);
+            log.info("Chat processed for userId={}, intent={}, uiType={}, time={}ms",
+                    userId, detectedIntent, richResponse.getUiType(), processingTime);
 
-            return ResponseEntity.ok(new AiChatResponse(response, showCards));
+            return ResponseEntity.ok(richResponse);
 
         } catch (Exception e) {
             log.error("Error in chat endpoint for userId={}: {}", userId, e.getMessage(), e);

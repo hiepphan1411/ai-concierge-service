@@ -17,11 +17,6 @@ import java.time.Duration;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
-/**
- * Giới hạn: 20 AI request mỗi phút mỗi userId
- * Chỉ áp dụng cho endpoint /ai/chat (các endpoint khác không giới hạn)
- * Trả về HTTP 429 Too Many Requests nếu vượt giới hạn
- */
 @Slf4j
 @Component
 public class RateLimitFilter extends OncePerRequestFilter {
@@ -36,7 +31,6 @@ public class RateLimitFilter extends OncePerRequestFilter {
                                     HttpServletResponse response,
                                     FilterChain filterChain) throws ServletException, IOException {
 
-        // Chỉ rate-limit endpoint /ai/chat (POST)
         String uri = request.getRequestURI();
         String method = request.getMethod();
 
@@ -62,7 +56,7 @@ public class RateLimitFilter extends OncePerRequestFilter {
         filterChain.doFilter(request, response);
     }
 
-//    Tạo bucket mới cho một user với giới hạn cấu hình
+
     private Bucket createBucket(String userId) {
         Bandwidth limit = Bandwidth.classic(
                 requestsPerMinute,
@@ -71,14 +65,13 @@ public class RateLimitFilter extends OncePerRequestFilter {
         return Bucket.builder().addLimit(limit).build();
     }
 
-    /** Lấy userId từ request body hoặc header */
     private String extractUserId(HttpServletRequest request) {
-        // Ưu tiên header X-User-Id nếu có
+
         String headerUserId = request.getHeader("X-User-Id");
         if (headerUserId != null && !headerUserId.isBlank()) {
             return headerUserId;
         }
-        // Fallback dùng session id hoặc IP
+
         String sessionId = request.getSession(false) != null
                 ? request.getSession().getId() : null;
         return sessionId != null ? sessionId : request.getRemoteAddr();

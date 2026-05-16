@@ -146,7 +146,7 @@ public class GeminiService {
     }
 
     /**
-     * Parse JSON response từ Gemini API lấy text content.
+     * Parse JSON response từ Gemini API lấy text content
      */
     private String parseGeminiResponse(String responseBody) {
         try {
