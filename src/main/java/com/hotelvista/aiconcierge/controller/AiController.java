@@ -15,6 +15,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
@@ -116,6 +117,7 @@ public class AiController {
     // GET /api/ai/chat/history/{userId}
     // Lịch sử chat
     @GetMapping("/chat/history/{userId}")
+    @PreAuthorize("isAuthenticated()")
     public ResponseEntity<List<ChatHistoryDTO>> getUserChatHistory(@PathVariable String userId) {
         try {
             log.info("Fetching chat history for user: {}", userId);
@@ -131,6 +133,7 @@ public class AiController {
     // GET /api/ai/chat/session/{sessionId}/messages
     // Load Messages của session
     @GetMapping("/chat/session/{sessionId}/messages")
+    @PreAuthorize("isAuthenticated()")
     public ResponseEntity<List<MessageDTO>> getSessionMessages(
             @PathVariable String sessionId,
             @RequestParam String userId) {
@@ -152,6 +155,7 @@ public class AiController {
     // DELETE /api/ai/chat/session/{sessionId}
     //Xóa session
     @DeleteMapping("/chat/session/{sessionId}")
+    @PreAuthorize("isAuthenticated()")
     public ResponseEntity<Void> deleteChatSession(
             @PathVariable String sessionId,
             @RequestParam String userId,
@@ -187,6 +191,7 @@ public class AiController {
      * Kiểm tra trạng thái, sl key
      */
     @GetMapping("/api-keys/status")
+    @PreAuthorize("hasRole('ADMIN')")
     public ResponseEntity<Map<String, Object>> apiKeysStatus() {
         try {
             Map<String, Object> status = new java.util.LinkedHashMap<>();
@@ -218,6 +223,7 @@ public class AiController {
      * Test availability của các API keys với prompt đơn giản
      */
     @PostMapping("/api-keys/test")
+    @PreAuthorize("hasRole('ADMIN')")
     public ResponseEntity<Map<String, Object>> testApiKeys(HttpServletRequest httpRequest) {
         try {
             Map<String, Object> testResult = new java.util.LinkedHashMap<>();
@@ -286,6 +292,7 @@ public class AiController {
      * Lấy statistics chi tiết của tất cả API keys
      */
     @GetMapping("/api-keys/stats")
+    @PreAuthorize("hasRole('ADMIN')")
     public ResponseEntity<Map<String, Object>> getApiKeysStats(HttpServletRequest httpRequest) {
         try {
             List<ApiKeyUsageStats> allStats = apiKeyManagementService.getAllKeyStats();
@@ -347,6 +354,7 @@ public class AiController {
      * Reset tất cả request counters
      */
     @PostMapping("/api-keys/reset-counters")
+    @PreAuthorize("hasRole('ADMIN')")
     public ResponseEntity<Map<String, Object>> resetApiKeyCounters(HttpServletRequest httpRequest) {
         try {
             apiKeyManagementService.resetAllCounters();
@@ -374,6 +382,7 @@ public class AiController {
      * @param keyIndex - Key index
      */
     @PostMapping("/api-keys/recover/{keyIndex}")
+    @PreAuthorize("hasRole('ADMIN')")
     public ResponseEntity<Map<String, Object>> recoverApiKey(
             @PathVariable int keyIndex,
             HttpServletRequest httpRequest) {

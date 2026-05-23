@@ -7,6 +7,7 @@ import com.hotelvista.aiconcierge.service.ChatSupportService;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
@@ -25,6 +26,7 @@ public class ChatSupportController {
      * GET /api/chat-support/staff/{staffId}/chats
      */
     @GetMapping("/staff/{staffId}/chats")
+    @PreAuthorize("hasAnyRole('ADMIN','EMPLOYEE')")
     public ResponseEntity<List<ChatSessionDTO>> getStaffChats(@PathVariable String staffId) {
         try {
             List<ChatSessionDTO> chats = chatSupportService.getStaffChats(staffId);
@@ -40,6 +42,7 @@ public class ChatSupportController {
      * GET /api/chat-support/pending
      */
     @GetMapping("/pending")
+    @PreAuthorize("hasAnyRole('ADMIN','EMPLOYEE')")
     public ResponseEntity<List<ChatSessionDTO>> getPendingChats() {
         try {
             List<ChatSessionDTO> chats = chatSupportService.getAllPendingChats();
@@ -55,6 +58,7 @@ public class ChatSupportController {
      * GET /api/chat-support/chats/{sessionId}/messages
      */
     @GetMapping("/chats/{sessionId}/messages")
+    @PreAuthorize("isAuthenticated()")
     public ResponseEntity<List<ChatMessageDTO>> getChatMessages(@PathVariable String sessionId) {
         try {
             List<ChatMessageDTO> messages = chatSupportService.getChatMessages(sessionId);
@@ -74,6 +78,7 @@ public class ChatSupportController {
      * POST /api/chat-support/chats/{sessionId}/messages
      */
     @PostMapping("/chats/{sessionId}/messages")
+    @PreAuthorize("hasAnyRole('ADMIN','EMPLOYEE')")
     public ResponseEntity<ChatMessageDTO> sendMessage(
             @PathVariable String sessionId,
             @RequestBody SendMessageRequest request) {
@@ -95,6 +100,7 @@ public class ChatSupportController {
      * POST /api/chat-support/chats/{sessionId}/assign
      */
     @PostMapping("/chats/{sessionId}/assign")
+    @PreAuthorize("hasAnyRole('ADMIN','EMPLOYEE')")
     public ResponseEntity<Void> assignChat(
             @PathVariable String sessionId,
             @RequestBody Map<String, String> request) {
@@ -114,6 +120,7 @@ public class ChatSupportController {
      * PATCH /api/chat-support/chats/{sessionId}/resolve
      */
     @PatchMapping("/chats/{sessionId}/resolve")
+    @PreAuthorize("hasAnyRole('ADMIN','EMPLOYEE')")
     public ResponseEntity<Void> resolveChat(@PathVariable String sessionId) {
         try {
             chatSupportService.markChatAsResolved(sessionId);
@@ -129,6 +136,7 @@ public class ChatSupportController {
      * GET /api/chat-support/customers/{customerId}/history
      */
     @GetMapping("/customers/{customerId}/history")
+    @PreAuthorize("isAuthenticated()")
     public ResponseEntity<List<ChatMessageDTO>> getChatHistory(@PathVariable String customerId) {
         try {
             List<ChatMessageDTO> history = chatSupportService.getChatHistory(customerId);
