@@ -19,7 +19,7 @@ public class CorsConfig {
                                 "http://localhost:5173",
                                 "http://localhost:3000",
                                 "http://localhost:8080",
-                                "http://192.168.111.200:8080"    // TODO: API Gateway
+                                "http://192.168.137.103:8080"    // TODO: API Gateway
                         )
                         .allowedMethods("GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS")
                         .allowedHeaders("*")

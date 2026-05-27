@@ -95,7 +95,7 @@ public class HotelIntentOrchestrator {
                 - If user chooses "theo ngày", "daily", "theo giờ", "hourly" -> booking_stay_type_select.
                 - If user provides actual date/time such as "từ 16-20/5", "2026-05-11", "9 giờ sáng" -> booking_date_select.
                 - If user selects or declines services -> booking_service_select.
-                - If user confirms -> booking_confirm.
+                - If user confirms, sau khi đã chọn xong dịch vụ -> booking_confirm.
                 - NEVER classify room selection as booking_stay_type_select.
                 - NEVER classify DAILY/HOURLY selection as booking_date_select.
                 - NEVER invent prices, room names, services, or booking details.
