@@ -183,7 +183,7 @@ public class GeminiService {
                 String text = fullText.toString().trim();
                 if ("MAX_TOKENS".equalsIgnoreCase(finishReason)) {
                     log.warn("Gemini response was truncated by maxOutputTokens. Returning safe completion note.");
-                    return text + "\n\nEm se dung tai day de tranh tra loi bi cat. Anh/chi vui long tiep tuc theo cac lua chon hien thi, hoac nhan lai yeu cau de em xu ly bang flow dat phong tung buoc.";
+                    return text + "\n\nEm sẽ dừng tại đây để tránh trả lời bị cắt. Anh/chị vui lòng tiếp tục theo các lựa chọn đang hiển thị, hoặc nhắn lại yêu cầu để em xử lý theo luồng đặt phòng từng bước.";
                 }
                 return text;
             }

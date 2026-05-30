@@ -297,7 +297,7 @@ public class BookingFlowService {
     }
 
     private AiChatResponse missingInfoResponse(AiChatResponse.BookingDraft draft, List<String> missing) {
-        String content = "Em chưa thể xác nhận vì còn thiếu: " + String.join(", ", missing) + ". Anh/chị vui lòng bổ sung phần còn thiếu để em tiếp tục.";
+        String content = "Em chưa thể xác nhận vì còn thiếu: " + describeMissingFields(missing) + ". Anh/chị vui lòng bổ sung phần còn thiếu để em tiếp tục.";
         if (missing.contains("bookingType")) return bookingTypeResponse(draft);
         if (missing.contains("checkInDate") || missing.contains("checkOutDate") || missing.contains("checkInTime") || missing.contains("durationHours")) {
             return dateTimeResponse(draft, content);
@@ -306,6 +306,25 @@ public class BookingFlowService {
             return availableRoomsResponse(draft, hotelTools.getAvailableRoomsRaw(draft.getBookingType(), draft.getCheckInDate(), draft.getCheckOutDate(), draft.getCheckInTime(), draft.getDurationHours(), draft.getGuests()), content);
         }
         return response("booking_missing_info", content, null, null, draft);
+    }
+
+    private String describeMissingFields(List<String> missing) {
+        return String.join(", ", missing.stream()
+                .map(this::missingFieldLabel)
+                .toList());
+    }
+
+    private String missingFieldLabel(String field) {
+        return switch (field) {
+            case "bookingType" -> "loại đặt phòng";
+            case "checkInDate" -> "ngày nhận phòng";
+            case "checkOutDate" -> "ngày trả phòng";
+            case "checkInTime" -> "giờ nhận phòng";
+            case "durationHours" -> "số giờ thuê";
+            case "selectedRoom" -> "phòng muốn đặt";
+            case "selectedServices" -> "lựa chọn dịch vụ";
+            default -> field;
+        };
     }
 
     private AiChatResponse response(String intent, String content, String uiType, Object uiData, AiChatResponse.BookingDraft draft) {
@@ -558,6 +577,9 @@ public class BookingFlowService {
         while (matcher.find()) {
             String id = matcher.group().toUpperCase(Locale.ROOT).replace("_", "-").replace(" ", "-");
             if (!ids.contains(id)) ids.add(id);
+        }
+        if (!ids.isEmpty()) {
+            return ids;
         }
         for (Map<String, Object> service : hotelTools.getServicesRaw()) {
             String id = Objects.toString(service.get("serviceID"), "");

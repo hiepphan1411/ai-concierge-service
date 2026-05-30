@@ -30,8 +30,11 @@ public class HotelTools {
     @Value("${booking.service.url:http://localhost:8081}")
     private String bookingServiceUrl;
 
-    @Value("${room.service.url:http://localhost:8083}")
+    @Value("${room.service.url:http://localhost:8084}")
     private String roomServiceUrl;
+
+    @Value("${service.service.url:http://localhost:8087}")
+    private String serviceServiceUrl;
 
     public HotelTools(RestTemplate restTemplate) {
         this.restTemplate = restTemplate;
@@ -215,7 +218,7 @@ public class HotelTools {
                         String roomNumber = Objects.toString(room.getOrDefault("roomNumber", ""), "");
                         String roomTypeName = Objects.toString(roomType.getOrDefault("typeName", "Room"), "Room");
                         item.put("roomTypeID", Objects.toString(roomType.getOrDefault("roomTypeID", ""), ""));
-                        item.put("typeName", roomNumber.isBlank() ? roomTypeName : "Phong " + roomNumber + " - " + roomTypeName);
+                        item.put("typeName", roomNumber.isBlank() ? roomTypeName : "Phòng " + roomNumber + " - " + roomTypeName);
                         item.put("roomTypeName", roomTypeName);
                         item.put("maxOccupancy", roomType.getOrDefault("maxOccupancy", 1));
                         item.put("capacity", roomType.getOrDefault("maxOccupancy", 1));
@@ -237,8 +240,12 @@ public class HotelTools {
     private List<Map<String, Object>> fetchRoomsRaw() {
         List<String> urls = List.of(
                 gatewayUrl + "/api/rooms",
-                roomServiceUrl + "/api/rooms"
-        );
+                roomServiceUrl + "/api/rooms",
+                "http://localhost:8084/api/rooms"
+        ).stream()
+                .filter(url -> url != null && !url.isBlank())
+                .distinct()
+                .toList();
 
         for (String url : urls) {
             try {
@@ -303,25 +310,16 @@ public class HotelTools {
      * Lấy danh sách dịch vụ từ service-service qua gateway
      */
     public String getServicesInfo() {
-        try {
-            String url = gatewayUrl + "/api/services";
-            ResponseEntity<List<Map<String, Object>>> response = restTemplate.exchange(
-                    url, HttpMethod.GET, null,
-                    new ParameterizedTypeReference<List<Map<String, Object>>>() {}
-            );
-            if (response.getStatusCode().is2xxSuccessful() && response.getBody() != null
-                    && !response.getBody().isEmpty()) {
-                StringBuilder sb = new StringBuilder("DỊCH VỤ KHÁCH SẠN:\n\n");
-                for (Map<String, Object> svc : response.getBody()) {
-                    sb.append("- ").append(svc.getOrDefault("serviceName", "Dịch vụ")).append("\n");
-                    sb.append("  ID: ").append(svc.getOrDefault("serviceID", "N/A")).append("\n");
-                    sb.append("  Giá: ").append(svc.getOrDefault("price", "N/A")).append(" VND\n");
-                    sb.append("  Mô tả: ").append(svc.getOrDefault("description", "")).append("\n\n");
-                }
-                return sb.toString();
+        List<Map<String, Object>> services = getServicesRaw();
+        if (!services.isEmpty()) {
+            StringBuilder sb = new StringBuilder("DỊCH VỤ KHÁCH SẠN:\n\n");
+            for (Map<String, Object> svc : services) {
+                sb.append("- ").append(svc.getOrDefault("serviceName", "Dịch vụ")).append("\n");
+                sb.append("  ID: ").append(svc.getOrDefault("serviceID", "N/A")).append("\n");
+                sb.append("  Giá: ").append(svc.getOrDefault("price", "N/A")).append(" VND\n");
+                sb.append("  Mô tả: ").append(svc.getOrDefault("description", "")).append("\n\n");
             }
-        } catch (Exception e) {
-            log.warn("Could not fetch services from gateway: {}", e.getMessage());
+            return sb.toString();
         }
         return getFallbackServices();
     }
@@ -330,25 +328,52 @@ public class HotelTools {
      * Lấy raw danh sách dịch vụ để render UI
      */
     public List<Map<String, Object>> getServicesRaw() {
-        try {
-            String url = gatewayUrl + "/api/services";
-            ResponseEntity<List<Map<String, Object>>> response = restTemplate.exchange(
-                    url, HttpMethod.GET, null,
-                    new ParameterizedTypeReference<List<Map<String, Object>>>() {}
-            );
-            if (response.getStatusCode().is2xxSuccessful() && response.getBody() != null) {
-                return response.getBody();
-            }
-        } catch (Exception e) {
-            log.warn("Could not fetch raw services: {}", e.getMessage());
+        List<Map<String, Object>> services = fetchServicesRaw();
+        if (!services.isEmpty()) {
+            return services;
         }
         return List.of(
-            Map.of("serviceID", "SVC001", "serviceName", "Bia Sài Gòn", "price", 500000, "description", "Xe 7 chỗ cao cấp"),
+            Map.of("serviceID", "SVC001", "serviceName", "Bia Sài Gòn", "price", 500000, "description", "Đồ uống phục vụ tại phòng"),
             Map.of("serviceID", "SVC002", "serviceName", "Spa & Massage", "price", 800000, "description", "Swedish Massage 60 phút"),
             Map.of("serviceID", "SVC003", "serviceName", "Giặt ủi", "price", 100000, "description", "Dịch vụ giặt ủi express"),
             Map.of("serviceID", "SVC004", "serviceName", "Bể bơi", "price", 200000, "description", "Truy cập gym và bể bơi"),
             Map.of("serviceID", "SVC005", "serviceName", "Bữa sáng buffet", "price", 350000, "description", "Buffet sáng tại nhà hàng Vista")
         );
+    }
+
+    private List<Map<String, Object>> fetchServicesRaw() {
+        List<String> urls = List.of(
+                gatewayUrl + "/api/services",
+                serviceServiceUrl + "/api/services",
+                "http://localhost:8087/api/services"
+        ).stream()
+                .filter(url -> url != null && !url.isBlank())
+                .distinct()
+                .toList();
+
+        String lastError = null;
+        for (String url : urls) {
+            try {
+                ResponseEntity<List<Map<String, Object>>> response = restTemplate.exchange(
+                        url,
+                        HttpMethod.GET,
+                        null,
+                        new ParameterizedTypeReference<List<Map<String, Object>>>() {}
+                );
+                if (response.getStatusCode().is2xxSuccessful() && response.getBody() != null && !response.getBody().isEmpty()) {
+                    log.debug("Fetched {} services from {}", response.getBody().size(), url);
+                    return response.getBody();
+                }
+            } catch (Exception e) {
+                lastError = e.getMessage();
+                log.debug("Could not fetch services from {}: {}", url, e.getMessage());
+            }
+        }
+
+        if (lastError != null) {
+            log.warn("Could not fetch raw services after trying {} endpoint(s): {}", urls.size(), lastError);
+        }
+        return List.of();
     }
 
     /**
@@ -482,28 +507,44 @@ public class HotelTools {
             return true;
         }
 
-        try {
-            String url = UriComponentsBuilder
-                    .fromHttpUrl(bookingServiceUrl + "/api/bookings/check-availability")
-                    .queryParam("roomNumber", roomNumber)
-                    .queryParam("checkInDate", checkIn)
-                    .queryParam("checkOutDate", checkOut)
-                    .toUriString();
+        List<String> urls = List.of(
+                bookingServiceUrl + "/api/bookings/check-availability",
+                "http://localhost:8081/api/bookings/check-availability",
+                gatewayUrl + "/api/bookings/check-availability"
+        ).stream()
+                .filter(url -> url != null && !url.isBlank())
+                .distinct()
+                .toList();
 
-            ResponseEntity<Map<String, Object>> response = restTemplate.exchange(
-                    url,
-                    HttpMethod.GET,
-                    null,
-                    new ParameterizedTypeReference<Map<String, Object>>() {}
-            );
+        String lastError = null;
+        for (String baseUrl : urls) {
+            try {
+                String url = UriComponentsBuilder
+                        .fromHttpUrl(baseUrl)
+                        .queryParam("roomNumber", roomNumber)
+                        .queryParam("checkInDate", checkIn)
+                        .queryParam("checkOutDate", checkOut)
+                        .toUriString();
 
-            if (response.getStatusCode().is2xxSuccessful() && response.getBody() != null) {
-                return Boolean.TRUE.equals(response.getBody().get("available"));
+                ResponseEntity<Map<String, Object>> response = restTemplate.exchange(
+                        url,
+                        HttpMethod.GET,
+                        null,
+                        new ParameterizedTypeReference<Map<String, Object>>() {}
+                );
+
+                if (response.getStatusCode().is2xxSuccessful() && response.getBody() != null) {
+                    return Boolean.TRUE.equals(response.getBody().get("available"));
+                }
+            } catch (Exception e) {
+                lastError = e.getMessage();
+                log.debug("Could not verify booking overlap for room {} via {}: {}", roomNumber, baseUrl, e.getMessage());
             }
-        } catch (Exception e) {
-            log.warn("Could not verify booking overlap for room {}: {}", roomNumber, e.getMessage());
         }
 
+        if (lastError != null) {
+            log.warn("Could not verify booking overlap for room {} after trying {} endpoint(s): {}", roomNumber, urls.size(), lastError);
+        }
         return true;
     }
 

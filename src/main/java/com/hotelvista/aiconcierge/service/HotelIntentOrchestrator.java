@@ -572,7 +572,7 @@ public class HotelIntentOrchestrator {
         String finalPrompt;
 
         if ("booking_request".equals(intent)) {
-            return "Ban muon dat phong theo ngay hay theo gio?";
+            return "Bạn muốn đặt phòng theo ngày hay theo giờ?";
         }
 
         if ("booking_request".equals(intent)) {
@@ -695,7 +695,7 @@ public class HotelIntentOrchestrator {
                 response.setUiData(Map.of(
                     "action", "REDIRECT_TO_BOOKING",
                     "bookingPageUrl", "/customer/bookingPage",
-                    "message", "Chuyen den trang dat phong de hoan tat thanh toan"
+                    "message", "Chuyển đến trang đặt phòng để hoàn tất thanh toán"
                 ));
             }
 
