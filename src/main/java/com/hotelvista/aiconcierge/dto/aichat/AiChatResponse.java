@@ -67,14 +67,23 @@ public class AiChatResponse {
     public static class BookingDraft {
         private String roomTypeId;
         private String roomTypeName;
+        private String selectedRoomId;
+        private String selectedRoomNumber;
+        private Map<String, Object> selectedRoom;
         private String bookingType;    // "DAILY" | "HOURLY"
+        private String state;
         private String checkInDate;
         private String checkOutDate;
+        private String checkInTime;
+        private String checkOutTime;
         private Integer durationHours;
         private Integer guests;
         private List<String> selectedServiceIds;
         private Double totalAmount;
         private String specialRequests;
+        private String customerName;
+        private String customerPhone;
+        private String customerEmail;
         private Boolean confirmed;
 
         // Getters & Setters
@@ -84,14 +93,32 @@ public class AiChatResponse {
         public String getRoomTypeName() { return roomTypeName; }
         public void setRoomTypeName(String roomTypeName) { this.roomTypeName = roomTypeName; }
 
+        public String getSelectedRoomId() { return selectedRoomId; }
+        public void setSelectedRoomId(String selectedRoomId) { this.selectedRoomId = selectedRoomId; }
+
+        public String getSelectedRoomNumber() { return selectedRoomNumber; }
+        public void setSelectedRoomNumber(String selectedRoomNumber) { this.selectedRoomNumber = selectedRoomNumber; }
+
+        public Map<String, Object> getSelectedRoom() { return selectedRoom; }
+        public void setSelectedRoom(Map<String, Object> selectedRoom) { this.selectedRoom = selectedRoom; }
+
         public String getBookingType() { return bookingType; }
         public void setBookingType(String bookingType) { this.bookingType = bookingType; }
+
+        public String getState() { return state; }
+        public void setState(String state) { this.state = state; }
 
         public String getCheckInDate() { return checkInDate; }
         public void setCheckInDate(String checkInDate) { this.checkInDate = checkInDate; }
 
         public String getCheckOutDate() { return checkOutDate; }
         public void setCheckOutDate(String checkOutDate) { this.checkOutDate = checkOutDate; }
+
+        public String getCheckInTime() { return checkInTime; }
+        public void setCheckInTime(String checkInTime) { this.checkInTime = checkInTime; }
+
+        public String getCheckOutTime() { return checkOutTime; }
+        public void setCheckOutTime(String checkOutTime) { this.checkOutTime = checkOutTime; }
 
         public Integer getDurationHours() { return durationHours; }
         public void setDurationHours(Integer durationHours) { this.durationHours = durationHours; }
@@ -107,6 +134,15 @@ public class AiChatResponse {
 
         public String getSpecialRequests() { return specialRequests; }
         public void setSpecialRequests(String specialRequests) { this.specialRequests = specialRequests; }
+
+        public String getCustomerName() { return customerName; }
+        public void setCustomerName(String customerName) { this.customerName = customerName; }
+
+        public String getCustomerPhone() { return customerPhone; }
+        public void setCustomerPhone(String customerPhone) { this.customerPhone = customerPhone; }
+
+        public String getCustomerEmail() { return customerEmail; }
+        public void setCustomerEmail(String customerEmail) { this.customerEmail = customerEmail; }
 
         public Boolean getConfirmed() { return confirmed; }
         public void setConfirmed(Boolean confirmed) { this.confirmed = confirmed; }

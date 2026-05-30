@@ -7,9 +7,16 @@ import org.springframework.http.HttpMethod;
 import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestTemplate;
+import org.springframework.web.util.UriComponentsBuilder;
 
+import java.time.LocalDate;
+import java.time.LocalDateTime;
+import java.time.LocalTime;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
+import java.util.stream.Collectors;
 
 @Slf4j
 @Component
@@ -20,10 +27,10 @@ public class HotelTools {
     @Value("${gateway.service.url:http://localhost:8080}")
     private String gatewayUrl;
 
-    @Value("${booking.service.url:http://localhost:8083}")
+    @Value("${booking.service.url:http://localhost:8081}")
     private String bookingServiceUrl;
 
-    @Value("${room.service.url:http://localhost:8081}")
+    @Value("${room.service.url:http://localhost:8083}")
     private String roomServiceUrl;
 
     public HotelTools(RestTemplate restTemplate) {
@@ -108,6 +115,148 @@ public class HotelTools {
         } catch (Exception e) {
             log.warn("Could not fetch rooms by type {}: {}", roomTypeId, e.getMessage());
         }
+        return List.of();
+    }
+
+    public List<Map<String, Object>> getAvailableRoomTypesRaw(
+            String bookingType,
+            String checkInDate,
+            String checkOutDate,
+            Integer durationHours,
+            Integer guests
+    ) {
+        int guestCount = guests != null && guests > 0 ? guests : 1;
+        LocalDateTime checkIn = buildCheckInDateTime(bookingType, checkInDate);
+        LocalDateTime checkOut = buildCheckOutDateTime(bookingType, checkInDate, checkOutDate, durationHours);
+
+        try {
+            ResponseEntity<List<Map<String, Object>>> response = restTemplate.exchange(
+                    gatewayUrl + "/api/rooms",
+                    HttpMethod.GET,
+                    null,
+                    new ParameterizedTypeReference<List<Map<String, Object>>>() {}
+            );
+
+            if (!response.getStatusCode().is2xxSuccessful() || response.getBody() == null) {
+                return List.of();
+            }
+
+            Map<String, Map<String, Object>> availableTypes = new LinkedHashMap<>();
+            for (Map<String, Object> room : response.getBody()) {
+                Map<String, Object> roomType = extractRoomType(room);
+                if (roomType.isEmpty()) {
+                    continue;
+                }
+
+                if (toInt(roomType.get("maxOccupancy"), 1) < guestCount) {
+                    continue;
+                }
+
+                String status = String.valueOf(room.getOrDefault("status", "AVAILABLE"));
+                if (!"AVAILABLE".equalsIgnoreCase(status)) {
+                    continue;
+                }
+
+                String roomNumber = String.valueOf(room.getOrDefault("roomNumber", ""));
+                if (!roomNumber.isBlank() && !isRoomAvailable(roomNumber, checkIn, checkOut)) {
+                    continue;
+                }
+
+                String typeId = String.valueOf(roomType.getOrDefault("roomTypeID", ""));
+                if (!typeId.isBlank()) {
+                    availableTypes.putIfAbsent(typeId, roomType);
+                }
+            }
+
+            return availableTypes.values().stream().toList();
+        } catch (Exception e) {
+            log.warn("Could not fetch available rooms, falling back to room types filtered by guests: {}", e.getMessage());
+            return getRoomTypesRaw().stream()
+                    .filter(roomType -> toInt(roomType.get("maxOccupancy"), 1) >= guestCount)
+                    .collect(Collectors.toList());
+        }
+    }
+
+    public List<Map<String, Object>> getAvailableRoomsRaw(
+            String bookingType,
+            String checkInDate,
+            String checkOutDate,
+            String checkInTime,
+            Integer durationHours,
+            Integer guests
+    ) {
+        int guestCount = guests != null && guests > 0 ? guests : 1;
+        LocalDateTime checkIn = buildCheckInDateTime(bookingType, checkInDate, checkInTime);
+        LocalDateTime checkOut = buildCheckOutDateTime(bookingType, checkInDate, checkOutDate, checkInTime, durationHours);
+
+        List<Map<String, Object>> rooms = fetchRoomsRaw();
+        if (rooms.isEmpty()) {
+            log.warn("No rooms returned from room service when checking availability");
+            return List.of();
+        }
+
+        List<Map<String, Object>> availableRooms = rooms.stream()
+                    .filter(room -> {
+                        Map<String, Object> roomType = extractRoomType(room);
+                        if (roomType.isEmpty()) return false;
+                        if (toInt(roomType.get("maxOccupancy"), 1) < guestCount) return false;
+                        String status = Objects.toString(room.getOrDefault("status", "AVAILABLE"), "AVAILABLE");
+                        if (!"AVAILABLE".equalsIgnoreCase(status)) return false;
+                        String roomNumber = Objects.toString(room.getOrDefault("roomNumber", ""), "");
+                        return roomNumber.isBlank() || isRoomAvailable(roomNumber, checkIn, checkOut);
+                    })
+                    .map(room -> {
+                        Map<String, Object> roomType = extractRoomType(room);
+                        Map<String, Object> item = new LinkedHashMap<>();
+                        item.put("roomId", Objects.toString(room.getOrDefault("roomID", room.getOrDefault("roomId", room.get("roomNumber"))), ""));
+                        item.put("roomNumber", Objects.toString(room.getOrDefault("roomNumber", ""), ""));
+                        item.put("status", Objects.toString(room.getOrDefault("status", "AVAILABLE"), "AVAILABLE"));
+                        item.put("floorName", room.getOrDefault("floorName", room.getOrDefault("floorNumber", "")));
+                        String roomNumber = Objects.toString(room.getOrDefault("roomNumber", ""), "");
+                        String roomTypeName = Objects.toString(roomType.getOrDefault("typeName", "Room"), "Room");
+                        item.put("roomTypeID", Objects.toString(roomType.getOrDefault("roomTypeID", ""), ""));
+                        item.put("typeName", roomNumber.isBlank() ? roomTypeName : "Phong " + roomNumber + " - " + roomTypeName);
+                        item.put("roomTypeName", roomTypeName);
+                        item.put("maxOccupancy", roomType.getOrDefault("maxOccupancy", 1));
+                        item.put("capacity", roomType.getOrDefault("maxOccupancy", 1));
+                        item.put("area", roomType.getOrDefault("area", ""));
+                        item.put("basePrice", roomType.getOrDefault("basePrice", 0));
+                        item.put("price", roomType.getOrDefault("basePrice", 0));
+                        item.put("roomTypeImage", roomType.getOrDefault("roomTypeImage", ""));
+                        item.put("image", roomType.getOrDefault("roomTypeImage", ""));
+                        item.put("amenities", roomType.getOrDefault("amenities", List.of()));
+                        item.put("roomType", roomType);
+                        return item;
+                    })
+                    .collect(Collectors.toList());
+        log.info("Available room search bookingType={}, checkIn={}, checkOut={}, guests={}, totalRooms={}, availableRooms={}",
+                bookingType, checkIn, checkOut, guestCount, rooms.size(), availableRooms.size());
+        return availableRooms;
+    }
+
+    private List<Map<String, Object>> fetchRoomsRaw() {
+        List<String> urls = List.of(
+                gatewayUrl + "/api/rooms",
+                roomServiceUrl + "/api/rooms"
+        );
+
+        for (String url : urls) {
+            try {
+                ResponseEntity<List<Map<String, Object>>> response = restTemplate.exchange(
+                        url,
+                        HttpMethod.GET,
+                        null,
+                        new ParameterizedTypeReference<List<Map<String, Object>>>() {}
+                );
+                if (response.getStatusCode().is2xxSuccessful() && response.getBody() != null && !response.getBody().isEmpty()) {
+                    log.debug("Fetched {} rooms from {}", response.getBody().size(), url);
+                    return response.getBody();
+                }
+            } catch (Exception e) {
+                log.warn("Could not fetch rooms from {}: {}", url, e.getMessage());
+            }
+        }
+
         return List.of();
     }
 
@@ -326,6 +475,122 @@ public class HotelTools {
                     Hỏi về bất kỳ dịch vụ cụ thể nào để biết thêm!
                     """;
         };
+    }
+
+    private boolean isRoomAvailable(String roomNumber, LocalDateTime checkIn, LocalDateTime checkOut) {
+        if (checkIn == null || checkOut == null || !checkOut.isAfter(checkIn)) {
+            return true;
+        }
+
+        try {
+            String url = UriComponentsBuilder
+                    .fromHttpUrl(bookingServiceUrl + "/api/bookings/check-availability")
+                    .queryParam("roomNumber", roomNumber)
+                    .queryParam("checkInDate", checkIn)
+                    .queryParam("checkOutDate", checkOut)
+                    .toUriString();
+
+            ResponseEntity<Map<String, Object>> response = restTemplate.exchange(
+                    url,
+                    HttpMethod.GET,
+                    null,
+                    new ParameterizedTypeReference<Map<String, Object>>() {}
+            );
+
+            if (response.getStatusCode().is2xxSuccessful() && response.getBody() != null) {
+                return Boolean.TRUE.equals(response.getBody().get("available"));
+            }
+        } catch (Exception e) {
+            log.warn("Could not verify booking overlap for room {}: {}", roomNumber, e.getMessage());
+        }
+
+        return true;
+    }
+
+    @SuppressWarnings("unchecked")
+    private Map<String, Object> extractRoomType(Map<String, Object> room) {
+        Object nestedRoomType = room.get("roomType");
+        if (nestedRoomType instanceof Map<?, ?> nested) {
+            Map<String, Object> result = new LinkedHashMap<>();
+            for (Map.Entry<?, ?> entry : nested.entrySet()) {
+                if (entry.getKey() != null) {
+                    result.put(String.valueOf(entry.getKey()), entry.getValue());
+                }
+            }
+            return result;
+        }
+
+        if (room.containsKey("roomTypeID") || room.containsKey("typeName")) {
+            return room;
+        }
+
+        return Map.of();
+    }
+
+    private LocalDateTime buildCheckInDateTime(String bookingType, String checkInDate) {
+        LocalDate date = parseDate(checkInDate);
+        if (date == null) return null;
+        return date.atTime("HOURLY".equalsIgnoreCase(bookingType)
+                ? LocalTime.now().withSecond(0).withNano(0)
+                : LocalTime.of(14, 0));
+    }
+
+    private LocalDateTime buildCheckInDateTime(String bookingType, String checkInDate, String checkInTime) {
+        LocalDate date = parseDate(checkInDate);
+        if (date == null) return null;
+        return date.atTime(parseTime(checkInTime, "HOURLY".equalsIgnoreCase(bookingType)
+                ? LocalTime.now().withSecond(0).withNano(0)
+                : LocalTime.of(14, 0)));
+    }
+
+    private LocalDateTime buildCheckOutDateTime(String bookingType, String checkInDate, String checkOutDate, Integer durationHours) {
+        LocalDateTime checkIn = buildCheckInDateTime(bookingType, checkInDate);
+        if (checkIn == null) return null;
+        if ("HOURLY".equalsIgnoreCase(bookingType)) {
+            int hours = durationHours != null && durationHours > 0 ? durationHours : 1;
+            return checkIn.plusHours(hours);
+        }
+        LocalDate checkout = parseDate(checkOutDate);
+        return checkout != null ? checkout.atTime(12, 0) : null;
+    }
+
+    private LocalDateTime buildCheckOutDateTime(String bookingType, String checkInDate, String checkOutDate, String checkInTime, Integer durationHours) {
+        LocalDateTime checkIn = buildCheckInDateTime(bookingType, checkInDate, checkInTime);
+        if (checkIn == null) return null;
+        if ("HOURLY".equalsIgnoreCase(bookingType)) {
+            int hours = durationHours != null && durationHours > 0 ? durationHours : 1;
+            return checkIn.plusHours(hours);
+        }
+        LocalDate checkout = parseDate(checkOutDate);
+        return checkout != null ? checkout.atTime(12, 0) : null;
+    }
+
+    private LocalTime parseTime(String value, LocalTime fallback) {
+        if (value == null || value.isBlank()) return fallback;
+        try {
+            return LocalTime.parse(value.trim());
+        } catch (Exception ignored) {
+            return fallback;
+        }
+    }
+
+    private LocalDate parseDate(String value) {
+        if (value == null || value.isBlank()) return null;
+        try {
+            return LocalDate.parse(value.trim());
+        } catch (Exception ignored) {
+            return null;
+        }
+    }
+
+    private int toInt(Object value, int defaultValue) {
+        if (value == null) return defaultValue;
+        if (value instanceof Number number) return number.intValue();
+        try {
+            return Integer.parseInt(Objects.toString(value));
+        } catch (Exception e) {
+            return defaultValue;
+        }
     }
 
     private String getFallbackRoomTypes() {

@@ -1,0 +1,4 @@
+-------------------------------------------------------------------------------
+Test set: com.hotelvista.aiconcierge.service.BookingFlowServiceTest
+-------------------------------------------------------------------------------
+Tests run: 3, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 2.749 s -- in com.hotelvista.aiconcierge.service.BookingFlowServiceTest

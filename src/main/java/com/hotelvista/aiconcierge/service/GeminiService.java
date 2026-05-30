@@ -106,7 +106,7 @@ public class GeminiService {
             generationConfig.put("temperature", 0.7);
             generationConfig.put("topK", 40);
             generationConfig.put("topP", 0.95);
-            generationConfig.put("maxOutputTokens", 1024);
+            generationConfig.put("maxOutputTokens", 2048);
             requestBody.put("generationConfig", generationConfig);
 
             HttpHeaders headers = new HttpHeaders();
@@ -123,6 +123,7 @@ public class GeminiService {
             );
 
             if (response.getStatusCode().is2xxSuccessful() && response.getBody() != null) {
+                log.debug("Raw Gemini response body: {}", response.getBody());
                 String parsedResponse = parseGeminiResponse(response.getBody());
                 log.debug("Gemini API returned successfully");
                 return parsedResponse;
@@ -165,6 +166,10 @@ public class GeminiService {
 
             if (candidates.isArray() && candidates.size() > 0) {
                 JsonNode firstCandidate = candidates.get(0);
+                String finishReason = firstCandidate.path("finishReason").asText("");
+                if (!finishReason.isBlank() && !"STOP".equalsIgnoreCase(finishReason)) {
+                    log.warn("Gemini candidate finishReason={}", finishReason);
+                }
                 JsonNode content = firstCandidate.path("content");
                 JsonNode parts = content.path("parts");
 
@@ -175,7 +180,12 @@ public class GeminiService {
                     fullText.append(text);
                 }
 
-                return fullText.toString();
+                String text = fullText.toString().trim();
+                if ("MAX_TOKENS".equalsIgnoreCase(finishReason)) {
+                    log.warn("Gemini response was truncated by maxOutputTokens. Returning safe completion note.");
+                    return text + "\n\nEm se dung tai day de tranh tra loi bi cat. Anh/chi vui long tiep tuc theo cac lua chon hien thi, hoac nhan lai yeu cau de em xu ly bang flow dat phong tung buoc.";
+                }
+                return text;
             }
 
             log.error("Unexpected response format from Gemini API");

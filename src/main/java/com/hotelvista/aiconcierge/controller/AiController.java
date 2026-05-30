@@ -199,7 +199,7 @@ public class AiController {
             
             status.put("totalApiKeys", keyCount);
             status.put("status", keyCount > 0 ? "CONFIGURED" : "NOT_CONFIGURED");
-            status.put("rateLimit", "20 requests per minute per key");
+            status.put("rateLimit", "5 requests per minute, 20 requests per day per key");
             status.put("peakRequests", "5 requests per minute per key");
             status.put("failoverEnabled", keyCount > 1);
             status.put("timestamp", System.currentTimeMillis());
@@ -325,7 +325,9 @@ public class AiController {
                 keyInfo.put("keyMasked", stat.getApiKeyMasked());
                 keyInfo.put("status", stat.getStatus());
                 keyInfo.put("currentMinuteRequests", stat.getRequestCountCurrentMinute());
+                keyInfo.put("currentDayRequests", stat.getRequestCountCurrentDay());
                 keyInfo.put("requestsLimit", stat.getRequestsPerMinute());
+                keyInfo.put("dailyRequestsLimit", stat.getRequestsPerDay());
                 keyInfo.put("totalSuccessful", stat.getTotalSuccessfulRequests());
                 keyInfo.put("totalFailed", stat.getTotalFailedRequests());
                 keyInfo.put("consecutiveFailures", stat.getConsecutiveFailures());
