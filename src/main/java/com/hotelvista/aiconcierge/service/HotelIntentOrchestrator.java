@@ -14,7 +14,7 @@ import java.util.*;
 public class HotelIntentOrchestrator {
 
     @Autowired
-    private OllamaService ollamaService;
+    private GeminiService geminiService;
 
     @Autowired
     private HotelTools hotelTools;
@@ -222,7 +222,7 @@ public class HotelIntentOrchestrator {
                 """;
 
         try {
-            String rawJson = ollamaService.generateResponse(intentPrompt);
+            String rawJson = geminiService.generateResponse(intentPrompt);
             String cleanJson = rawJson.trim()
                     .replaceAll("(?s)```json\\s*", "")
                     .replaceAll("(?s)```\\s*", "")
@@ -384,7 +384,7 @@ public class HotelIntentOrchestrator {
                     """;
         }
 
-        return ollamaService.generateResponse(finalPrompt);
+        return geminiService.generateResponse(finalPrompt);
     }
 
     //RICH UI ENRICHMENT

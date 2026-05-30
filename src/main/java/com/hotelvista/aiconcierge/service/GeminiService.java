@@ -8,6 +8,7 @@ import org.springframework.http.*;
 import org.springframework.stereotype.Service;
 import org.springframework.web.client.RestTemplate;
 import org.springframework.web.client.RestClientException;
+import org.springframework.web.client.HttpStatusCodeException;
 
 import java.util.HashMap;
 import java.util.List;
@@ -89,7 +90,7 @@ public class GeminiService {
      */
     private String callGeminiWithKey(String apiKey, String prompt) {
         try {
-            String url = apiKeyConfig.getApiUrl() + "?key=" + apiKey;
+            String url = apiKeyConfig.getApiUrl();
 
             // Build request body theo Gemini API format
             Map<String, Object> requestBody = new HashMap<>();
@@ -110,6 +111,7 @@ public class GeminiService {
 
             HttpHeaders headers = new HttpHeaders();
             headers.setContentType(MediaType.APPLICATION_JSON);
+            headers.set("X-goog-api-key", apiKey);
 
             HttpEntity<Map<String, Object>> entity = new HttpEntity<>(requestBody, headers);
 
@@ -120,7 +122,7 @@ public class GeminiService {
                     String.class
             );
 
-            if (response.getStatusCode() == HttpStatus.OK) {
+            if (response.getStatusCode().is2xxSuccessful() && response.getBody() != null) {
                 String parsedResponse = parseGeminiResponse(response.getBody());
                 log.debug("Gemini API returned successfully");
                 return parsedResponse;
@@ -134,6 +136,14 @@ public class GeminiService {
                 String errorMsg = "API returned: " + response.getStatusCode();
                 throw new RuntimeException(errorMsg);
             }
+
+        } catch (HttpStatusCodeException e) {
+            if (e.getStatusCode() == HttpStatus.TOO_MANY_REQUESTS) {
+                log.warn("Gemini API rate limit exceeded (429)");
+                return null;
+            }
+            log.warn("Gemini API returned error {}: {}", e.getStatusCode(), e.getResponseBodyAsString());
+            throw new RuntimeException("API returned: " + e.getStatusCode(), e);
 
         } catch (RestClientException e) {
             log.warn("REST client exception: {}", e.getMessage());

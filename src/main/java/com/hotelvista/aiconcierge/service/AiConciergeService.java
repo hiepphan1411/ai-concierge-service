@@ -23,7 +23,6 @@ import java.util.stream.Collectors;
 @Service
 public class AiConciergeService {
 
-    private final OllamaService ollamaService;
     private final ConversationMemory conversationMemory;
     private final HotelIntentOrchestrator hotelIntentOrchestrator;
 
@@ -40,10 +39,8 @@ public class AiConciergeService {
     private AiConversationHistoryRepository conversationHistoryRepository;
 
     @Autowired
-    public AiConciergeService(OllamaService ollamaService,
-                              ConversationMemory conversationMemory,
+    public AiConciergeService(ConversationMemory conversationMemory,
                               HotelIntentOrchestrator hotelIntentOrchestrator) {
-        this.ollamaService = ollamaService;
         this.conversationMemory = conversationMemory;
         this.hotelIntentOrchestrator = hotelIntentOrchestrator;
     }

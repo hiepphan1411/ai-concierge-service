@@ -20,6 +20,8 @@ public class ApiKeyManagementService {
 
     private static final String REDIS_KEY_PREFIX = "api_key:";
     private static final String REDIS_KEYS_LIST = "api_keys:list";
+    private static final int REQUESTS_PER_MINUTE_LIMIT = 5;
+    private static final int REQUESTS_PER_DAY_LIMIT = 20;
 
     @Autowired
     private RedisTemplate<String, ApiKeyUsageStats> apiKeyStatsRedisTemplate;
@@ -50,7 +52,18 @@ public class ApiKeyManagementService {
             // Kiểm tra key đã tồn tại chưa
             Boolean keyExists = apiKeyStatsRedisTemplate.hasKey(redisKey);
             if (keyExists != null && keyExists) {
-                log.debug("API key already exists in Redis");
+                ApiKeyUsageStats existingStats = apiKeyStatsRedisTemplate.opsForValue().get(redisKey);
+                if (existingStats != null) {
+                    existingStats.resetCounterIfNeeded();
+                    existingStats.setApiKeyMasked(maskApiKey(key));
+                    existingStats.setRequestsPerMinute(REQUESTS_PER_MINUTE_LIMIT);
+                    existingStats.setPeakRequestsPerMinute(REQUESTS_PER_MINUTE_LIMIT);
+                    existingStats.setRequestsPerDay(REQUESTS_PER_DAY_LIMIT);
+                    existingStats.setUpdatedAt(LocalDateTime.now());
+                    apiKeyStatsRedisTemplate.opsForValue().set(redisKey, existingStats);
+                }
+                stringRedisTemplate.opsForSet().add(REDIS_KEYS_LIST, keyHash);
+                log.debug("API key already exists in Redis; quota config refreshed");
                 continue;
             }
 
@@ -59,10 +72,13 @@ public class ApiKeyManagementService {
                     .keyHash(keyHash)
                     .apiKeyMasked(maskApiKey(key))
                     .status(ApiKeyUsageStats.KeyStatus.ACTIVE)
-                    .requestsPerMinute(20)
-                    .peakRequestsPerMinute(5)
+                    .requestsPerMinute(REQUESTS_PER_MINUTE_LIMIT)
+                    .requestsPerDay(REQUESTS_PER_DAY_LIMIT)
+                    .peakRequestsPerMinute(REQUESTS_PER_MINUTE_LIMIT)
                     .requestCountCurrentMinute(0)
                     .peakCountCurrentMinute(0)
+                    .requestCountCurrentDay(0)
+                    .lastDailyResetDate(java.time.LocalDate.now())
                     .lastResetTime(System.currentTimeMillis())
                     .consecutiveFailures(0)
                     .totalSuccessfulRequests(0L)
@@ -85,11 +101,19 @@ public class ApiKeyManagementService {
     public String getNextAvailableApiKey() {
         Set<String> keyHashes = stringRedisTemplate.opsForSet().members(REDIS_KEYS_LIST);
 
+        if (keyHashes == null || keyHashes.isEmpty()) {
+            throw new RuntimeException("No Gemini API keys registered in Redis");
+        }
+
         // Lấy tất cả stats, sắp xếp theo tải
         List<ApiKeyUsageStats> allStats = keyHashes.stream()
                 .map(hash -> {
                     String redisKey = REDIS_KEY_PREFIX + hash;
-                    return apiKeyStatsRedisTemplate.opsForValue().get(redisKey);
+                    ApiKeyUsageStats stats = apiKeyStatsRedisTemplate.opsForValue().get(redisKey);
+                    if (stats != null) {
+                        stats.resetCounterIfNeeded();
+                    }
+                    return stats;
                 })
                 .filter(Objects::nonNull)
                 .sorted(Comparator
@@ -111,30 +135,19 @@ public class ApiKeyManagementService {
                 String redisKey = REDIS_KEY_PREFIX + stat.getKeyHash();
                 apiKeyStatsRedisTemplate.opsForValue().set(redisKey, stat);
                 
-                log.debug("Selected key: {}, current requests: {}/{}", 
+                log.debug("Selected key: {}, minute requests: {}/{}, day requests: {}/{}",
                     stat.getApiKeyMasked(), 
                     stat.getRequestCountCurrentMinute(), 
-                    stat.getRequestsPerMinute());
+                    stat.getRequestsPerMinute(),
+                    stat.getRequestCountCurrentDay(),
+                    stat.getRequestsPerDay());
 
                 return findRawApiKeyByHash(stat.getKeyHash());
             }
         }
 
-        // Nếu tất cả ACTIVE keys đều vượt giới hạn, thử lấy key bất kỳ
-        log.warn("All active keys are rate limited, trying any available key");
-        for (ApiKeyUsageStats stat : allStats) {
-            if (stat.getStatus() != ApiKeyUsageStats.KeyStatus.INACTIVE) {
-                stat.incrementRequestCount();
-                stat.setUpdatedAt(LocalDateTime.now());
-                
-                String redisKey = REDIS_KEY_PREFIX + stat.getKeyHash();
-                apiKeyStatsRedisTemplate.opsForValue().set(redisKey, stat);
-                
-                return findRawApiKeyByHash(stat.getKeyHash());
-            }
-        }
-
-        throw new RuntimeException("No available API keys (all inactive or failed)");
+        // Nếu tất cả ACTIVE keys đều vượt giới hạn, dừng lại để không gọi quá quota.
+        throw new RuntimeException("No available Gemini API keys within quota (5/minute, 20/day per key)");
     }
 
     /**
@@ -232,6 +245,8 @@ public class ApiKeyManagementService {
                 if (stats != null) {
                     stats.setRequestCountCurrentMinute(0);
                     stats.setPeakCountCurrentMinute(0);
+                    stats.setRequestCountCurrentDay(0);
+                    stats.setLastDailyResetDate(java.time.LocalDate.now());
                     stats.setLastResetTime(System.currentTimeMillis());
                     stats.setUpdatedAt(LocalDateTime.now());
                     apiKeyStatsRedisTemplate.opsForValue().set(redisKey, stats);
@@ -253,6 +268,8 @@ public class ApiKeyManagementService {
             stats.setStatus(ApiKeyUsageStats.KeyStatus.ACTIVE);
             stats.setConsecutiveFailures(0);
             stats.setRequestCountCurrentMinute(0);
+            stats.setRequestCountCurrentDay(0);
+            stats.setLastDailyResetDate(java.time.LocalDate.now());
             stats.setLastResetTime(System.currentTimeMillis());
             stats.setUpdatedAt(LocalDateTime.now());
             apiKeyStatsRedisTemplate.opsForValue().set(redisKey, stats);

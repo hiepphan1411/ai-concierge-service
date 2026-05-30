@@ -21,7 +21,7 @@ public class GeminiApiKeyConfig {
     @Value("${gemini.api.keys:}")
     private String apiKeysString;
 
-    @Value("${gemini.api.url:https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent}")
+    @Value("${gemini.api.url:https://generativelanguage.googleapis.com/v1beta/models/gemini-flash-latest:generateContent}")
     private String apiUrl;
 
     private List<String> apiKeys;
